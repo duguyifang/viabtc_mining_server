@@ -10,6 +10,7 @@
 # include "bp_peer.h"
 # include "bp_cli.h"
 # include "bp_request.h"
+# include "kafka_producer.h"
 
 const char *version = "0.1.0";
 nw_timer cron_timer;
@@ -62,6 +63,14 @@ static int init_log(void)
     return 0;
 }
 
+static int init_kafka(void) {
+    printf("--->brokers : %s, topic : %s\n", settings.brokers, settings.topic);
+    if(kafka_init(settings.brokers, settings.topic) != 0) {
+        return -__LINE__;
+    }
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     printf("process: %s version: %s, compile date: %s %s\n", "bitpeer", version, __DATE__, __TIME__);
@@ -83,6 +92,7 @@ int main(int argc, char *argv[])
     if (ret < 0) {
         error(EXIT_FAILURE, errno, "load config fail: %d", ret);
     }
+
     ret = init_process();
     if (ret < 0) {
         error(EXIT_FAILURE, errno, "init process fail: %d", ret);
@@ -99,18 +109,25 @@ int main(int argc, char *argv[])
     if (ret < 0) {
         error(EXIT_FAILURE, errno, "init server fail: %d", ret);
     }
-    ret = init_request();
+
+    // ret = init_request();
+    // if (ret < 0) {
+    //     error(EXIT_FAILURE, errno, "init request fail: %d", ret);
+    // }
+    // ret = init_cli();
+    // if (ret < 0) {
+    //     error(EXIT_FAILURE, errno, "init cli fail: %d", ret);
+    // }
+
+    ret = init_kafka();
     if (ret < 0) {
-        error(EXIT_FAILURE, errno, "init request fail: %d", ret);
-    }
-    ret = init_cli();
-    if (ret < 0) {
-        error(EXIT_FAILURE, errno, "init cli fail: %d", ret);
+        error(EXIT_FAILURE, errno, "init server fail: %d", ret);
     }
     ret = init_peer();
     if (ret < 0) {
         error(EXIT_FAILURE, errno, "init peer fail: %d", ret);
     }
+
 
     nw_timer_set(&cron_timer, 0.1, true, on_cron_check, NULL);
     nw_timer_start(&cron_timer);

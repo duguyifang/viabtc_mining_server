@@ -15,7 +15,7 @@ static double diff1_bignum;
 static double diff_current;
 static nw_timer diff_timer;
 static nw_timer height_timer;
-static nw_timer jobmaster_update_timer;
+// static nw_timer jobmaster_update_timer;
 static nw_timer broadcast_timer;
 static dict_t *peer_dict;
 static dict_t *block_dict;
@@ -294,7 +294,7 @@ static int send_block_nitify(sds hash, int height, uint32_t curtime)
         return -__LINE__;
     }
     json_decref(message);
-    log_debug("block notify msg: %s", message_data);
+    dlog_stderr("block notify msg: %s", message_data);
 
     rpc_pkg pkg;
     memset(&pkg, 0, sizeof(pkg));
@@ -313,10 +313,44 @@ static int send_block_nitify(sds hash, int height, uint32_t curtime)
     }
     free(message_data);
 
-    for (size_t i = 0; i < settings.jobmaster->count; ++i) {
-        struct sockaddr_in *addr = &settings.jobmaster->arr[i];
-        sendto(sockfd, pkg_data, pkg_size, 0, (struct sockaddr *)addr, sizeof(*addr));
+    // for (size_t i = 0; i < settings.jobmaster->count; ++i) {
+    //     struct sockaddr_in *addr = &settings.jobmaster->arr[i];
+    //     sendto(sockfd, pkg_data, pkg_size, 0, (struct sockaddr *)addr, sizeof(*addr));
+    // }
+
+    return 0;
+}
+
+static int send_rawgbt_notify(sds hash, int height, uint32_t block_time, uint32_t nbits, uint32_t block_version) {
+    json_t *result = json_object();
+
+    json_object_set_new(result, "previousblockhash", json_string(hash));
+    json_object_set_new(result, "height", json_integer(height));
+    json_object_set_new(result, "coinbasevalue", json_integer(625000000));
+    char nbitshex[10] = {0};
+    sprintf(nbitshex, "%08x", nbits);
+    json_object_set_new(result, "bits", json_string(nbitshex));
+    json_object_set_new(result, "mintime", json_integer(block_time - 60 * 10));
+    json_object_set_new(result, "curtime", json_integer(block_time));
+    json_object_set_new(result, "version", json_integer(block_version));
+    json_t *transactions = json_array();
+    // json_array_append_new(transactions, json_string(""));
+    json_object_set_new(result, "transactions", transactions);
+    json_t *message = json_object();
+    json_object_set_new(message, "result", result);
+    char *message_data = json_dumps(message, 0);
+    if (message_data == NULL) {
+        log_error("json_dumps fail");
+        json_decref(message);
+        return -__LINE__;
     }
+    json_decref(message);
+    dlog_stderr("block rawgbt notify msg: %s", message_data);
+
+    if(send_msg_to_kafka(message_data, strlen(message_data)) != 0) {
+        printf(">>>>>send msg to kafka failed<<<<");
+        return -__LINE__;
+    } 
 
     return 0;
 }
@@ -348,7 +382,7 @@ static int process_inv(nw_ses *ses, void *msg, size_t size)
             memcpy(hash_r, hash, 32);
             reverse_mem(hash_r, 32);
             sds hex = bin2hex(hash_r, 32);
-            log_debug("peer: %s, recv inv block: %s", nw_sock_human_addr(&ses->peer_addr), hex);
+            dlog_stderr("peer: %s, recv inv block: %s", nw_sock_human_addr(&ses->peer_addr), hex);
             sdsfree(hex);
 
             sds key = sdsnewlen(hash, sizeof(hash));
@@ -401,15 +435,26 @@ static int process_headers(nw_ses *ses, void *msg, size_t size)
             if (height > notify_height) {
                 uint32_t block_time = le32toh(*(uint32_t *)(header + 68));
                 uint32_t curtime = time(NULL);
+                uint32_t nbits = le32toh(*(uint32_t *)(header + 72));
+                uint32_t block_version  = le32toh(*(uint32_t *)(header));
                 if (curtime <= block_time) {
                     curtime = block_time + 1;
                 }
+                printf("process_headers------------->\n");
                 int ret = send_block_nitify(hex, height, curtime);
                 if (ret < 0) {
                     log_error("send_block_nitify fail: %d", ret);
                     sdsfree(hex);
                     return -__LINE__;
                 }
+
+                ret = send_rawgbt_notify(hex, height, block_time, nbits, block_version);
+                if (ret < 0) {
+                    log_error("send_block_nitify fail: %d", ret);
+                    sdsfree(hex);
+                    return -__LINE__;
+                }
+
                 notify_height = height;
             }
         } else if (best_height > 0) {
@@ -526,7 +571,7 @@ static int process_block(nw_ses *ses, void *msg, size_t size)
     reverse_mem(hash_r, sizeof(hash_r));
     sds hex = bin2hex(hash_r, 32);
     if (ses) {
-        log_debug("peer: %s, recv block: %s, size: %zu", nw_sock_human_addr(&ses->peer_addr), hex, size);
+        dlog_stderr("peer: %s, recv block: %s, size: %zu", nw_sock_human_addr(&ses->peer_addr), hex, size);
     }
 
     double diff = get_block_difficulty(hash_r);
@@ -558,10 +603,20 @@ static int process_block(nw_ses *ses, void *msg, size_t size)
     if (best_height > notify_height) {
         uint32_t block_time = le32toh(*(uint32_t *)(msg + 68));
         uint32_t curtime = time(NULL);
+        uint32_t nbits = le32toh(*(uint32_t *)(msg + 72));
+        uint32_t block_version  = le32toh(*(uint32_t *)(msg));
         if (curtime <= block_time) {
             curtime = block_time + 1;
         }
-        int ret = send_block_nitify(hex, best_height, curtime);
+        printf("process_block------------->\n");
+        int ret = send_block_nitify(hex, height, curtime);
+        if (ret < 0) {
+            log_error("send_block_nitify fail: %d", ret);
+            sdsfree(hex);
+            return -__LINE__;
+        }
+
+        ret = send_rawgbt_notify(hex, best_height+1, block_time, nbits, block_version);
         if (ret < 0) {
             log_error("send_block_nitify fail: %d", ret);
             sdsfree(hex);
@@ -619,7 +674,7 @@ static void on_recv_pkg(nw_ses *ses, void *data, size_t size)
     memcpy(cmd, data + 4, 12);
     void *payload = data + 24;
     uint32_t payload_size = le32toh(*(uint32_t *)(data + 16));
-    log_debug("peer: %s, cmd: %s, size: %u", nw_sock_human_addr(&ses->peer_addr), cmd, payload_size);
+    dlog_stderr("peer: %s, cmd: %s, size: %u", nw_sock_human_addr(&ses->peer_addr), cmd, payload_size);
 
     if (strcmp(cmd, "version") == 0) {
         int ret = send_verack(ses);
@@ -701,13 +756,13 @@ int update_peer(void)
         if (entry) {
             struct peer_info *info = entry->val;
             info->update_time = now;
-            log_debug("peer: %s exist", key);
+            dlog_stderr("peer: %s exist", key);
             sdsfree(key);
             continue;
         }
         sdsfree(key);
 
-        log_debug("add peer: %s", json_string_value(row));
+        dlog_stderr("add peer: %s", json_string_value(row));
         nw_clt_cfg cfg;
         memset(&cfg, 0, sizeof(cfg));
         sds sock_cfg = sdsempty();
@@ -762,7 +817,7 @@ int update_peer(void)
     while ((entry = dict_next(iter)) != NULL) {
         struct peer_info *info = entry->val;
         if (info->update_time != now) {
-            log_debug("remove peer: %s", (sds)entry->key);
+            dlog_stderr("remove peer: %s", (sds)entry->key);
             dict_delete(peer_dict, entry->key);
         }
     }
@@ -815,6 +870,7 @@ static void inetv4_list_free(inetv4_list *list)
     }
 }
 
+/*
 static int on_jobmaster_callback(json_t *reply)
 {
     if (!reply) {
@@ -848,11 +904,11 @@ static int on_jobmaster_callback(json_t *reply)
     return 0;
 }
 
-static void on_jobmaster_update(nw_timer *timer, void *privdata)
-{
-    update_jobmaster_config(on_jobmaster_callback);
-}
-
+// static void on_jobmaster_update(nw_timer *timer, void *privdata)
+// {
+//     update_jobmaster_config(on_jobmaster_callback);
+// }
+*/
 int init_peer(void)
 {
     dict_types peer_type;
@@ -890,8 +946,8 @@ int init_peer(void)
         return -__LINE__;
     best_block = sdsempty();
 
-    nw_timer_set(&jobmaster_update_timer, settings.jobmaster_update_interval, true, on_jobmaster_update, NULL);
-    nw_timer_start(&jobmaster_update_timer);
+    // nw_timer_set(&jobmaster_update_timer, settings.jobmaster_update_interval, true, on_jobmaster_update, NULL);
+    // nw_timer_start(&jobmaster_update_timer);
 
     return 0;
 }

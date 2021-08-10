@@ -1,0 +1,21 @@
+#ifndef KAFKA_PRODUCER_SIMPLE
+#define KAFKA_PRODUCER_SIMPLE
+#include <librdkafka/rdkafka.h>
+
+#define RDKAFKA_MESSAGE_MAX_BYTES "60000000"
+#define RDKAFKA_FETCH_MESSAGE_MAX_BYTES "60000000"
+#define RDKAFKA_QUEUED_MAX_MESSAGES_KBYTES "60000"
+#define RDKAFKA_COMPRESSION_CODEC "snappy"
+#define RDKAFKA_QUEUE_BUFFERING_MAX_MESSAGES "100000"
+#define RDKAFKA_QUEUE_BUFFERING_MAX_MS "1000"
+#define RDKAFKA_BATCH_NUM_MESSAGES "1000"
+#define RDKAFKA_CONSUMER_FETCH_WAIT_MAX_MS "10"
+#define RDKAFKA_HIGH_LEVEL_CONSUMER_FETCH_WAIT_MAX_MS "50"
+
+int kafka_init(char* brokers, char* topic);
+
+int send_msg_to_kafka(char* payload, size_t len);
+
+void kafka_destroy() ;
+
+#endif //KAFKA_PRODUCER_SIMPLE

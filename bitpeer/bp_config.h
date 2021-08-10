@@ -35,7 +35,7 @@ struct settings {
     nw_svr_cfg          svr;
     cli_svr_cfg         cli;
     coin_rpc_cfg        coin;
-
+    
     char                *peer_config_path;
     int                 reconnect_timeout;
     int                 broadcast_limit;
@@ -47,6 +47,8 @@ struct settings {
     inetv4_list         *jobmaster;
     int                 jobmaster_update_interval;
     http_svr_cfg        http_svr;
+    char                *brokers;
+    char                *topic;
 };
 
 extern struct settings settings;

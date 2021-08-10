@@ -8,29 +8,29 @@
 
 struct settings settings;
 
-static int load_cfg_jobmaster(json_t *root, const char *key)
-{
-    int ret = read_cfg_str(root, key, &settings.jobmaster_url, NULL);
-    if (ret < 0) {
-        return -__LINE__;
-    }
+// static int load_cfg_jobmaster(json_t *root, const char *key)
+// {
+//     int ret = read_cfg_str(root, key, &settings.jobmaster_url, NULL);
+//     if (ret < 0) {
+//         return -__LINE__;
+//     }
 
-    ret = init_jobmaster_config();
-    if (ret < 0) {
-        return -__LINE__;
-    }
+//     ret = init_jobmaster_config();
+//     if (ret < 0) {
+//         return -__LINE__;
+//     }
 
-    settings.jobmaster = malloc(sizeof(inetv4_list));
-    ret = load_cfg_inetv4_list_direct(settings.jobmaster_cfg, settings.jobmaster);
-    if (ret < 0) {
-        char *str = json_dumps(settings.jobmaster_cfg, 0);
-        log_error("load cfg jobmaster fail, jobmaster_cfg: %s", str);
-        free(str);
-        return -__LINE__;
-    }
+//     settings.jobmaster = malloc(sizeof(inetv4_list));
+//     ret = load_cfg_inetv4_list_direct(settings.jobmaster_cfg, settings.jobmaster);
+//     if (ret < 0) {
+//         char *str = json_dumps(settings.jobmaster_cfg, 0);
+//         log_error("load cfg jobmaster fail, jobmaster_cfg: %s", str);
+//         free(str);
+//         return -__LINE__;
+//     }
 
-    return 0;
-}
+//     return 0;
+// }
 
 int do_load_config(json_t *root)
 {
@@ -70,11 +70,11 @@ int do_load_config(json_t *root)
         printf("read request_auth fail: %d\n", ret);
         return -__LINE__;
     }
-    ret = load_cfg_jobmaster(root, "jobmaster_url");
-    if (ret < 0) {
-        printf("load cfg jobmaster fail: %d\n", ret);
-        return -__LINE__;
-    }
+    // ret = load_cfg_jobmaster(root, "jobmaster_url");
+    // if (ret < 0) {
+    //     printf("load cfg jobmaster fail: %d\n", ret);
+    //     return -__LINE__;
+    // }
     ret = read_cfg_int(root, "jobmaster_update_interval", &settings.jobmaster_update_interval, false, 30);
     if (ret < 0) {
         printf("read jobmaster_update_interval fail: %d\n", ret);
@@ -109,6 +109,20 @@ int do_load_config(json_t *root)
     ret = load_cfg_http_svr(root, "http_svr", &settings.http_svr);
     if (ret < 0) {
         printf("load http svr config fail: %d\n", ret);
+        return -__LINE__;
+    }
+
+    char *brokers = NULL;
+    ret = read_cfg_str(root, "brokers", &settings.brokers, NULL);
+    if (ret < 0) {
+        printf("read brokers fail: %d\n", ret);
+        return -__LINE__;
+    }
+
+    char *topic = NULL;
+    ret = read_cfg_str(root, "topic", &settings.topic, NULL);
+    if (ret < 0) {
+        printf("read topic fail: %d\n", ret);
         return -__LINE__;
     }
 
